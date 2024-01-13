@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'The I2C Adapter'
+project = 'The SPI Adapter'
 copyright = '2023, Zapta'
 author = 'Zapta'
 release = '0.0.1'
