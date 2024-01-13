@@ -1,0 +1,4 @@
+i2c-adapter
+luma.oled
+luma.core
+pillow

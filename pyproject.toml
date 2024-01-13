@@ -1,0 +1,50 @@
+# Doc:
+# https://hatch.pypa.io/latest/config/build/
+#
+# Examples:
+# https://github.com/pypa/hatch/blob/master/pyproject.toml
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spi_adapter"
+version = "0.00.1"
+authors = [
+  { name="Zapta", email="zapta@zapta.com" },
+]
+description = "A simple USB to SPI adapter that works."
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "pyserial >=3.5",
+]
+
+[tool.hatch.build.targets.sdist]
+# NOTE: The package directory below must match the project name above.
+include = [
+  "LICENSE",
+  "/src/spi_adapter",
+]
+# NOTE: root .gitignore can't be excluded per 
+# https://github.com/pypa/hatch/discussions/368
+exclude = [
+  ".gitignore",
+  ".vscode",
+  ".*.sh",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/zapta/spi_adapter"
+"Documentation" = "https://spi-adapter.readthedocs.io/en/latest"
+"Repository" = "https://github.com/zapta/spi_adapter.git"
+"Bug Tracker" = "https://github.com/zapta/spi_adapter/issues"
+
