@@ -13,8 +13,10 @@ print(f"Connected.", flush=True)
 i = 0
 while True:
   i += 1
+  cs = 0  #i % 4
+  mode = (i % 2) * 2
   print(f"\n{i:04d} Sending...", flush=True)
-  result = spi.send(bytearray([0x11, 0x22, 0x33]), 2, 0)
+  result = spi.send(bytearray([0x11, 0x22, 0x33]), extra_bytes=2, cs=cs, mode=mode)
   print(f"{i:04d} Result: {result.hex(' ')}", flush=True)
   time.sleep(0.3)
 

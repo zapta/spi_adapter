@@ -24,43 +24,60 @@ class SpiAdapter:
     def send(
         self,
         data: bytearray | bytes,
-        extra_byte_count: int,
+        extra_bytes: int,
         cs: int = 0,
-        silent: bool = False,
+        mode: int = 0,
+        return_bytes_read: bool = True
     ) -> Optional[Tuple[bytearray, bytearray]]:
         """Perform an SPI transaction.
 
-        :param write_data: Bytes to write to the device.
+        :param write_data: Bytes to write to the device. The number of bytes must be 1024 at most.
         :type write_data: bytearray | bytes | None
 
-        :param extra_write_count: Number of additional ``0x00`` bytes to write to the device. This is typically use to read
-          a response from the device.
-        :type extra_write_count: int
+        :param extra_bytes: Number of additional ``0x00`` bytes to write to the device. This is typically use to read
+          a response from the device. The value ``len(data) + extra_bytes`` should not exceed 1024.
+        :type extra_bytes: int
 
         :param cs: The Chip Select (CS) output to use for this transaction. This allows to connect the SPI Adapter to multiple
-           SPI devcies.
-        :type silent: int
+           SPI devices.
+        :type cs: int
+        
+        :param mode: The SPI mode to use. Should be in the range [0, 3].
+        :type mode: int
+        
+        :param return_bytes_read: Indicates if the response should include the bytes read
+           on the MISO line during the transaction.
+        :type return_bytes_read: bool
 
-        :returns: A bytearray with with the bytes read during the transaction, or None if an error. The length
-            of the bytearray is ``len(data) + extra_write_count.
-        :rtype: bytearray
+        :returns: If error, returns None, otherwise returns a ``bytearray``. If ``return_read_bytes == True``
+           then the bytearray contains exactly ``len(data) + extra_bytes`` bytes that were read during
+           the transaction. Otherwise the bytearray is empty(). Not requesting the read bytes can result
+           in performance improvements with large write_only transactions.
+        :rtype: bytearray | None
         """
-        # TODO: Validate parameters.
-        # assert False, "Implement me"
-        # assert isinstance(device_address, int)
-        # assert 0 <= device_address <= 127
-        # assert isinstance(byte_count, int)
-        # assert 0 <= byte_count <= 256
+        assert isinstance(data, (bytearray, bytes))
+        assert len(data) <= 1024
+        assert isinstance(extra_bytes, int)
+        assert 0 <= extra_bytes <= 1024
+        assert (len(data) + extra_bytes) <= 1024
+        assert isinstance(cs, int)
+        assert 0 <= cs <= 3
+        assert isinstance(mode, int)
+        assert 0 <= mode <= 3
+        assert isinstance(return_bytes_read, bool)
 
         # Construct and send the command request.
         req = bytearray()
         req.append(ord("s"))
-        config_byte = 0b00010000
+        config_byte = 0b10000 if return_bytes_read else 0b00000
+        config_byte |= mode << 2
+        config_byte |= cs 
+        print(f"Config byte: {config_byte:08b}", flush=True)
         req.append(config_byte)
         req.append(len(data) // 256)
         req.append(len(data) % 256)
-        req.append(extra_byte_count // 256)
-        req.append(extra_byte_count % 256)
+        req.append(extra_bytes // 256)
+        req.append(extra_bytes % 256)
         req.extend(data)
         n = self.__serial.write(req)
         if n != len(req):
@@ -107,7 +124,7 @@ class SpiAdapter:
             )
             return None
         resp_count = (resp[0] << 8) + resp[1]
-        expected_resp_count = len(data) + extra_byte_count
+        expected_resp_count = len(data) + extra_bytes
         if resp_count != expected_resp_count:
             print(
                 f"SPI read: response count mismatch, expected {expected_resp_count}, got {resp_count}",

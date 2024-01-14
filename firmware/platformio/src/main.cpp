@@ -7,14 +7,22 @@
 #include "board.h"
 
 // TODO: Add support for debug info using an auxilary UART.
-// TODO: Add handling of SEND config
-// TODO: Initialize the SPI hardware
-// TODO: Add handling of CS.
 
-// Arduino pins definitions:
-// #define PIN_SPI_MISO  (16u)
-// #define PIN_SPI_MOSI  (19u)
-// #define PIN_SPI_SCK   (18u)
+// SPI pins:
+//   PIN_SPI_MISO  (16u)
+//   PIN_SPI_MOSI  (19u)
+//   PIN_SPI_SCK   (18u)
+
+// The four CS output pins.
+static uint8_t cs_pins[] = {
+    20,  // CS 0 = GP20
+    21,  // CS 1 = GP21
+    22,  // CS 2 = GP22
+    26,  // CS 3 = GP26
+};
+
+static constexpr uint8_t kNumCsPins = sizeof(cs_pins) / sizeof(*cs_pins);
+static_assert(kNumCsPins == 4);
 
 // using board::i2c;
 using board::led;
@@ -48,6 +56,22 @@ class Timer {
  private:
   uint32_t _start_millis;
 };
+
+// Turn off all CS outputs.
+static inline void all_cs_off() {
+  static_assert(kNumCsPins == 4);
+  digitalWrite(cs_pins[0], HIGH);
+  digitalWrite(cs_pins[1], HIGH);
+  digitalWrite(cs_pins[2], HIGH);
+  digitalWrite(cs_pins[3], HIGH);
+}
+
+// Turn on a specific CS output.
+static inline void cs_on(uint8_t cs_index) {
+  if (cs_index < kNumCsPins) {
+    digitalWrite(cs_pins[cs_index], LOW);
+  }
+}
 
 // Time since the start of last cmd.
 static Timer cmd_timer;
@@ -136,7 +160,8 @@ static class InfoCommandHandler : public CommandHandler {
 // Command:
 // - byte 0:    's'
 // - byte 1:    Config byte, see below
-// - byte 2,3:  Number custom data bytes to write. Big endian. Should be in the
+// - byte 2,3:  Number custom data bytes to write. Big endian. Should be in
+// the
 //              range 0 to (kMaxTransactionBytes - extra_bytes_to_write).
 // - byte 4,5:  Number of extra 0x00 bytes to write. Big endian. should
 //              range 0 to kMaxTransactionBytes.
@@ -175,14 +200,10 @@ static class InfoCommandHandler : public CommandHandler {
 //
 static class SendCommandHandler : public CommandHandler {
  public:
-  SendCommandHandler() : CommandHandler("SEND") {}
-  virtual void on_cmd_entered() override {
-    _got_cmd_header = false;
-    _return_read_bytes = false;
-    _spi_mode = SPI_MODE0;
-    _custom_data_count = 0;
-    _extra_data_count = 0;
-  }
+  SendCommandHandler() : CommandHandler("SEND") { reset(); }
+
+  virtual void on_cmd_entered() override { reset(); }
+
   virtual bool on_cmd_loop() override {
     // Read command header.
     if (!_got_cmd_header) {
@@ -192,7 +213,8 @@ static class SendCommandHandler : public CommandHandler {
       }
       // Parse the command header
       // _config = data_buffer[0];
-      _spi_mode = (SPIMode) (data_buffer[0] & 0b11);
+      _cs_index = data_buffer[0] & 0b11;
+      _spi_mode = (SPIMode)((data_buffer[0] >> 2) & 0b11);
       _return_read_bytes = data_buffer[0] & 0b10000;
       _custom_data_count = (((uint16_t)data_buffer[1]) << 8) + data_buffer[2];
       _extra_data_count = (((uint16_t)data_buffer[3]) << 8) + data_buffer[4];
@@ -220,20 +242,29 @@ static class SendCommandHandler : public CommandHandler {
       }
     }
 
-    // Perform the SPI transaction
+    // At this point, the data buffer has already the custom bytes.
+    // Prepare the extra bytes to send.
+    static_assert(sizeof(data_buffer) >= kMaxTransactionBytes);
+    memset(&data_buffer[_custom_data_count], 0, _extra_data_count);
+
+ 
+
+    // Perform the SPI transaction using data_buffer as TX/RX buffer.
     SPISettings spi_setting(4000000, MSBFIRST, _spi_mode);
     SPI.beginTransaction(spi_setting);
-    uint16_t i = 0;
-    while (i < _custom_data_count) {
-      data_buffer[i] = SPI.transfer(data_buffer[i]);
-      i++;
-    }
+
+    // SPI.transfer(data_buffer, 0);
+
+    // Now that the clock level was adjusted to the mode, turn on the 
+    // CS.
+    cs_on(_cs_index);
+
+    // Perofrm the transaction, using data_buffer and both TX and RX buffer.
     const uint16_t total_bytes = _custom_data_count + _extra_data_count;
-    while (i < total_bytes) {
-      data_buffer[i] = SPI.transfer(0x00);
-      i++;
-    }
+    SPI.transfer(data_buffer, total_bytes);
+
     SPI.endTransaction();
+    all_cs_off();
 
     // All done. Send OK response.
     Serial.write('K');
@@ -248,10 +279,22 @@ static class SendCommandHandler : public CommandHandler {
 
  private:
   bool _got_cmd_header = false;
-  bool _return_read_bytes = false;
-  SPIMode _spi_mode = SPI_MODE0;
-  uint16_t _custom_data_count = 0;
-  uint16_t _extra_data_count = 0;
+
+  // Command header info.
+  uint8_t _cs_index;
+  SPIMode _spi_mode;
+  bool _return_read_bytes;
+  uint16_t _custom_data_count;
+  uint16_t _extra_data_count;
+
+  void reset() {
+    _got_cmd_header = false;
+    _cs_index = 0;
+    _spi_mode = SPI_MODE0;
+    _return_read_bytes = false;
+    _custom_data_count = 0;
+    _extra_data_count = 0;
+  }
 
 } send_cmd_handler;
 
@@ -282,12 +325,15 @@ void setup() {
   // USB serial.
   Serial.begin(115200);
 
-  // spi_settings.bitOrder(MSBFIRST);
+  // Init CS outputs.
+  for (uint8_t i = 0; i < kNumCsPins; i++) {
+    auto cs_pin = cs_pins[i];
+    pinMode(cs_pin, OUTPUT);
+  }
+  all_cs_off();
 
+  // Initialize the SPI channel.
   SPI.begin();
-  // i2c.setClock(400000);   // 400Khz.
-  // i2c.setTimeo(ut(50000);  // 50ms timeout.
-  // i2c.begin();
 }
 
 // If in command, points to the command handler.
@@ -325,7 +371,9 @@ void loop() {
     return;
   }
 
-  // Not in a command.
+  // Not in a command. Turn off all CS outputs. Just in case.
+  all_cs_off();
+
   // Try to read selection char of next command.
   static_assert(sizeof(data_buffer) >= 1);
   if (!read_serial_bytes(data_buffer, 1)) {
