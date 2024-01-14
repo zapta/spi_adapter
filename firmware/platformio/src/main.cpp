@@ -1,24 +1,29 @@
 // Firmware of the I2C Adapter implementation using a Raspberry Pico.
 
 #include <Arduino.h>
-#include <Wire.h>
+// #include <Wire.h>
+#include <SPI.h>
 
 #include "board.h"
 
-using board::i2c;
+// TODO: Add support for debug info using an auxilary UART.
+// TODO: Add handling of SEND config
+// TODO: Initialize the SPI hardware
+// TODO: Add handling of CS.
+
+// Arduino pins definitions:
+// #define PIN_SPI_MISO  (16u)
+// #define PIN_SPI_MOSI  (19u)
+// #define PIN_SPI_SCK   (18u)
+
+// using board::i2c;
 using board::led;
 
 static constexpr uint8_t kApiVersion = 1;
 static constexpr uint16_t kFirmwareVersion = 1;
 
-// Arduino libraries seems to be limited to 256 bytes per read or write
-// operation so we limit it here.
-static constexpr uint16_t kMaxReadWriteBytes = 256;
-
-// TODO: Add support for debug info using an auxilary UART.
-
-// NOTE: Arduino Wire API documentation is here
-// https://www.arduino.cc/reference/en/language/functions/communication/wire/
+// Max number of bytes per transaction.
+static constexpr uint16_t kMaxTransactionBytes = 1024;
 
 // All command bytes must arrive within this time period.
 static constexpr uint32_t kCommandTimeoutMillis = 250;
@@ -27,8 +32,8 @@ static constexpr uint32_t kCommandTimeoutMillis = 250;
 // it by filtering the 'no-change' updates.
 static bool last_led_state;
 
-// A temporary buffer for commands and I2C operations.
-static uint8_t data_buffer[kMaxReadWriteBytes];
+// A temporary buffer for commands and SPI operations.
+static uint8_t data_buffer[kMaxTransactionBytes];
 
 // A simple timer.
 // Cveate: overflows 50 days after last reset().
@@ -116,7 +121,9 @@ static class InfoCommandHandler : public CommandHandler {
  public:
   InfoCommandHandler() : CommandHandler("INFO") {}
   virtual bool on_cmd_loop() override {
-    Serial.write(0x03);                     // Number of bytes to follow.
+    Serial.write(0x05);                     // Number of bytes to follow.
+    Serial.write(0x12);                     // Magic number. MSB
+    Serial.write(0x34);                     // Magic Number. LSB
     Serial.write(kApiVersion);              // API version.
     Serial.write(kFirmwareVersion >> 8);    // Firmware version MSB.
     Serial.write(kFirmwareVersion & 0x08);  // Firmware version LSB.
@@ -124,14 +131,16 @@ static class InfoCommandHandler : public CommandHandler {
   }
 } info_cmd_handler;
 
-// WRITE command. Writes N bytes to an I2C device.
+// SEND command. Writes N bytes to an I2C device.
 //
 // Command:
-// - byte 0:    'w'
-// - byte 1:    Device's I2C address in the range 0-127.
-// - byte 2,3:  Number bytes to write. Big endian. Should be in the
-//              range 0 to kMaxReadWriteBytes.
-// - Byte 4...  The data bytes to write.
+// - byte 0:    's'
+// - byte 1:    Config byte, see below
+// - byte 2,3:  Number custom data bytes to write. Big endian. Should be in the
+//              range 0 to (kMaxTransactionBytes - extra_bytes_to_write).
+// - byte 4,5:  Number of extra 0x00 bytes to write. Big endian. should
+//              range 0 to kMaxTransactionBytes.
+// - Byte 6...  The custom data bytes to write.
 //
 // Error response:
 // - byte 0:    'E' for error.
@@ -140,148 +149,111 @@ static class InfoCommandHandler : public CommandHandler {
 //
 // OK response
 // - byte 0:    'K' for 'OK'.
-//
-// Additional error info:
+// - byte 1,2:  Number read bytes being return. This is zero if config.b4 is
+// zero, else
+//              it's the sumr of custom and extra bytes in the request.
+// - byte 3...  Returned read bytes.
+
+// Request config byte bits
+// 0,1 : CS index.
+// 2:3 : SPI mode, per arduino::SPIMode.
+// 4   : Include bytes read in response
+// 5   : Reserved. Should be 0.
+// 6   : Reserved. Should be 0.
+// 7   : Reserved. Should be 0.
+
+// Additional error response info:
 //  1 : Data too long
 //  2 : NACK on transmit of address
 //  3 : NACK on transmit of data
 //  4 : Other error
 //  5 : Timeout
 //  8 : Device address out of range..
-//  9 : Count out of range.
+//  9 : Custom byte count out of range.
+// 10 : Extra byte count out of range.
+// 11 : Byte count out of limit
 //
-static class WriteCommandHandler : public CommandHandler {
+static class SendCommandHandler : public CommandHandler {
  public:
-  WriteCommandHandler() : CommandHandler("WRITE") {}
+  SendCommandHandler() : CommandHandler("SEND") {}
   virtual void on_cmd_entered() override {
     _got_cmd_header = false;
-    _device_addr = 0;
-    _count = 0;
+    _return_read_bytes = false;
+    _spi_mode = SPI_MODE0;
+    _custom_data_count = 0;
+    _extra_data_count = 0;
   }
   virtual bool on_cmd_loop() override {
     // Read command header.
     if (!_got_cmd_header) {
-      static_assert(sizeof(data_buffer) >= 3);
-      if (!read_serial_bytes(data_buffer, 3)) {
+      static_assert(sizeof(data_buffer) >= 5);
+      if (!read_serial_bytes(data_buffer, 5)) {
         return false;
       }
-      _device_addr = data_buffer[0];
-      _count = (((uint16_t)data_buffer[1]) << 8) + data_buffer[2];
+      // Parse the command header
+      // _config = data_buffer[0];
+      _spi_mode = (SPIMode) (data_buffer[0] & 0b11);
+      _return_read_bytes = data_buffer[0] & 0b10000;
+      _custom_data_count = (((uint16_t)data_buffer[1]) << 8) + data_buffer[2];
+      _extra_data_count = (((uint16_t)data_buffer[3]) << 8) + data_buffer[4];
       _got_cmd_header = true;
+
+      // Validate the command header.
+      uint8_t status =
+          (_custom_data_count > kMaxTransactionBytes)  ? 0x09
+          : (_extra_data_count > kMaxTransactionBytes) ? 0x0a
+          : (_custom_data_count + _extra_data_count > kMaxTransactionBytes)
+              ? 0x0b
+              : 0x00;
+      if (status != 0x00) {
+        Serial.write('E');
+        Serial.write(status);
+        return true;
+      }
     }
 
-    // Validate the command header.
-    uint8_t status = (_device_addr > 127)            ? 0x08
-                     : (_count > kMaxReadWriteBytes) ? 0x09
-                                                     : 0x00;
-    if (status != 0x00) {
-      Serial.write('E');
-      Serial.write(status);
-      return true;
+    // We have a valid header. Now read the custom data bytes, if any.
+    static_assert(sizeof(data_buffer) >= kMaxTransactionBytes);
+    if (_custom_data_count) {
+      if (!read_serial_bytes(data_buffer, _custom_data_count)) {
+        return false;
+      }
     }
 
-    // Read the data bytes
-    static_assert(sizeof(data_buffer) >= kMaxReadWriteBytes);
-    if (!read_serial_bytes(data_buffer, _count)) {
-      return false;
+    // Perform the SPI transaction
+    SPISettings spi_setting(4000000, MSBFIRST, _spi_mode);
+    SPI.beginTransaction(spi_setting);
+    uint16_t i = 0;
+    while (i < _custom_data_count) {
+      data_buffer[i] = SPI.transfer(data_buffer[i]);
+      i++;
     }
+    const uint16_t total_bytes = _custom_data_count + _extra_data_count;
+    while (i < total_bytes) {
+      data_buffer[i] = SPI.transfer(0x00);
+      i++;
+    }
+    SPI.endTransaction();
 
-    // Device address is 7 bits LSB.
-    i2c.beginTransmission(_device_addr);
-    i2c.write(data_buffer, _count);
-    status = i2c.endTransmission(true);
-
-    // TODO: Should do here if i2c_chan.getTimeout() is true?
-
-    // All done
-    if (status == 0x00) {
-      Serial.write('K');
-    } else {
-      Serial.write('E');
-      Serial.write(status);
+    // All done. Send OK response.
+    Serial.write('K');
+    const uint16_t response_count = _return_read_bytes ? total_bytes : 0;
+    Serial.write(response_count >> 8);    // Count MSB
+    Serial.write(response_count & 0xff);  // Count LSB
+    if (response_count) {
+      Serial.write(data_buffer, response_count);
     }
     return true;
   }
 
  private:
   bool _got_cmd_header = false;
-  uint8_t _device_addr = 0;
-  uint16_t _count = 0;
+  bool _return_read_bytes = false;
+  SPIMode _spi_mode = SPI_MODE0;
+  uint16_t _custom_data_count = 0;
+  uint16_t _extra_data_count = 0;
 
-} write_cmd_handler;
-
-// READ command. Read N bytes from an I2C device.
-//
-// Command:
-// - byte 0:    'r'
-// - byte 1:    Device's I2C address in the range 0-127.
-// - byte 2,3:  Number bytes to read. Big endian. Should be in the
-//              range 0 to kMaxReadWriteBytes.
-//
-// Error  Response:
-// - byte 0:    'E' for 'error'.
-// - byte 1:    Additional device specific internal error info per the list
-// below.
-//
-// OK Response:
-// - byte 0:    'K' for 'OK'.
-// - byte 1,2:  Number bytes to follow. Big endian. Identical to the
-//              count in the command.
-// - byte 3...  The bytes read.
-//
-// Additional error info:
-//  1 : Byte count mismatch while reading.
-//  2 : Bytes not available for reading.
-//  8 : Device address out of range..
-//  9 : Count out of range.
-static class ReadCommandHandler : public CommandHandler {
- public:
-  ReadCommandHandler() : CommandHandler("READ") {}
-
-  virtual bool on_cmd_loop() override {
-    // Get the command address and the count.
-
-    static_assert(sizeof(data_buffer) >= 3);
-    if (!read_serial_bytes(data_buffer, 3)) {
-      return false;  // try later
-    }
-
-    // Sanity check the command
-    const uint8_t device_addr = data_buffer[0];
-    const uint16_t count = (((uint16_t)data_buffer[1]) << 8) + data_buffer[2];
-    uint8_t status = (device_addr > 127)            ? 0x08
-                     : (count > kMaxReadWriteBytes) ? 0x09
-                                                    : 0x00;
-    if (status != 0x00) {
-      Serial.write('E');
-      Serial.write(status);
-      return true;
-    }
-
-    // Read the bytes from the I2C devcie.
-    const size_t actual_count = i2c.requestFrom(device_addr, count, true);
-
-    // Sanity check the response.
-    status = (actual_count != count)      ? 0x01
-             : (i2c.available() != count) ? 0x02
-                                          : 0x00;
-    if (status != 0x00) {
-      Serial.write('E');
-      Serial.write(status);
-      return true;
-    }
-
-    // Here when OK, send status, count, and data.
-    Serial.write('K');
-    Serial.write(count >> 8);
-    Serial.write(count & 0x00ff);
-    for (uint16_t i = 0; i < count; i++) {
-      Serial.write(i2c.read());
-    }
-    return true;
-  }
-
-} read_cmd_handler;
+} send_cmd_handler;
 
 // Given a command char, return a Command pointer or null if invalid command
 // char.
@@ -291,10 +263,8 @@ static CommandHandler* find_command_handler_by_char(const char cmd_char) {
       return &echo_cmd_handler;
     case 'i':
       return &info_cmd_handler;
-    case 'w':
-      return &write_cmd_handler;
-    case 'r':
-      return &read_cmd_handler;
+    case 's':
+      return &send_cmd_handler;
     default:
       return nullptr;
   }
@@ -312,9 +282,12 @@ void setup() {
   // USB serial.
   Serial.begin(115200);
 
-  i2c.setClock(400000);   // 400Khz.
-  i2c.setTimeout(50000);  // 50ms timeout.
-  i2c.begin();
+  // spi_settings.bitOrder(MSBFIRST);
+
+  SPI.begin();
+  // i2c.setClock(400000);   // 400Khz.
+  // i2c.setTimeo(ut(50000);  // 50ms timeout.
+  // i2c.begin();
 }
 
 // If in command, points to the command handler.
@@ -328,7 +301,8 @@ void loop() {
   // Update LED state. Solid if active or short blinks if idle.
   {
     const bool is_active = current_cmd || millis_since_cmd_start < 200;
-    const bool new_led_state = is_active  ||  (millis_since_cmd_start & 0b11111111100) == 0;
+    const bool new_led_state =
+        is_active || (millis_since_cmd_start & 0b11111111100) == 0;
     if (new_led_state != last_led_state) {
       led.update(new_led_state);
       last_led_state = new_led_state;

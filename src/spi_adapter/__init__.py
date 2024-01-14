@@ -22,7 +22,11 @@ class SpiAdapter:
             raise RuntimeError(f"spi driver not detected at port {port}")
 
     def send(
-        self,  data: bytearray | bytes, extra_write_count: int, cs:int = 0, silent:bool=False
+        self,
+        data: bytearray | bytes,
+        extra_byte_count: int,
+        cs: int = 0,
+        silent: bool = False,
     ) -> Optional[Tuple[bytearray, bytearray]]:
         """Perform an SPI transaction.
 
@@ -30,33 +34,34 @@ class SpiAdapter:
         :type write_data: bytearray | bytes | None
 
         :param extra_write_count: Number of additional ``0x00`` bytes to write to the device. This is typically use to read
-          a response from the device. 
+          a response from the device.
         :type extra_write_count: int
 
         :param cs: The Chip Select (CS) output to use for this transaction. This allows to connect the SPI Adapter to multiple
            SPI devcies.
         :type silent: int
 
-        :param silent: If true, supress printing of error messages. Useful when using the method
-            to test the existance of a SPI device.
-        :type silent: bool
-
-        :returns: A bytearray with with the bytes read during the transaction, or None if an error. The length 
+        :returns: A bytearray with with the bytes read during the transaction, or None if an error. The length
             of the bytearray is ``len(data) + extra_write_count.
         :rtype: bytearray
         """
-        assert False, "Implement me"
-        assert isinstance(device_address, int)
-        assert 0 <= device_address <= 127
-        assert isinstance(byte_count, int)
-        assert 0 <= byte_count <= 256
+        # TODO: Validate parameters.
+        # assert False, "Implement me"
+        # assert isinstance(device_address, int)
+        # assert 0 <= device_address <= 127
+        # assert isinstance(byte_count, int)
+        # assert 0 <= byte_count <= 256
 
         # Construct and send the command request.
         req = bytearray()
-        req.append(ord("r"))
-        req.append(device_address)
-        req.append(byte_count // 256)
-        req.append(byte_count % 256)
+        req.append(ord("s"))
+        config_byte = 0b00010000
+        req.append(config_byte)
+        req.append(len(data) // 256)
+        req.append(len(data) % 256)
+        req.append(extra_byte_count // 256)
+        req.append(extra_byte_count % 256)
+        req.extend(data)
         n = self.__serial.write(req)
         if n != len(req):
             print(f"SPI read: write mismatch, expected {len(req)}, got {n}", flush=True)
@@ -87,8 +92,7 @@ class SpiAdapter:
                     flush=True,
                 )
                 return None
-            if not slient:
-                print(f"SPI read: failed with status = {resp[1]:02x}", flush=True)
+            print(f"SPI read: failed with status = {resp[1]:02x}", flush=True)
             return None
 
         # Handle the OK case.
@@ -103,25 +107,24 @@ class SpiAdapter:
             )
             return None
         resp_count = (resp[0] << 8) + resp[1]
-        if resp_count != byte_count:
+        expected_resp_count = len(data) + extra_byte_count
+        if resp_count != expected_resp_count:
             print(
-                f"SPI read: response count mismatch, expected {byte_count}, got {resp_count}",
+                f"SPI read: response count mismatch, expected {expected_resp_count}, got {resp_count}",
                 flush=True,
             )
             return None
 
         # Read the data bytes
-        resp = self.__serial.read(byte_count)
+        resp = self.__serial.read(resp_count)
         assert isinstance(resp, bytes), type(resp)
-        if len(resp) != byte_count:
+        if len(resp) != resp_count:
             print(
-                f"SPI read: data read mismatch, expected {byte_count}, got {len(resp)}",
+                f"SPI read: data read mismatch, expected {resp_count}, got {len(resp)}",
                 flush=True,
             )
             return None
         return bytearray(resp)
-
-    
 
     def test_connection_to_driver(self, max_tries: int = 3) -> bool:
         """Tests connection to the SPI Adapter.
@@ -133,7 +136,7 @@ class SpiAdapter:
         :type max_tries: int
 
         :returns: True if connection is OK, false otherwise.
-        :rtype: bool 
+        :rtype: bool
         """
         assert max_tries > 0
         for i in range(max_tries):
