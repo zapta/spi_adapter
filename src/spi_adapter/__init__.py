@@ -81,7 +81,7 @@ class SpiAdapter:
     def send(
         self,
         data: bytearray | bytes,
-        extra_bytes: int,
+        extra_bytes: int = 0,
         cs: int = 0,
         mode: int = 0,
         speed: int = 1000000,

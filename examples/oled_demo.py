@@ -7,10 +7,14 @@
 import time
 import datetime
 
-from i2c_adapter import I2cAdapter
-from luma.oled.device import sh1106
+# from i2c_adapter import I2cAdapter
+from luma.oled.device import sh1106, ssd1306
 from luma.core.render import canvas
 from PIL import ImageFont, ImageColor
+
+import sys
+sys.path.insert(0, '../src/')
+from spi_adapter import SpiAdapter, AuxPinMode
 
 
 # Related readings
@@ -23,41 +27,47 @@ from PIL import ImageFont, ImageColor
 
 
 # Customize for your system.
-my_port = "COM20"
-my_oled_addr = 0x3C
+my_port = "COM18"
+dc_aux_pin = 0
+
+# my_oled_addr = 0x3C
 
 
 class MyLumaSerial:
     """Implementation of the luma.core.interface.serial interface using an SPI Adapter.
-    See luma.core.interface.serial.i2c for an example.
+    See luma.core.interface.serial.spi for an example.
     """
 
-    def __init__(self, port: str, addr: int, cmd_mode: int, data_mode: int):
+    def __init__(self, port: str):
         """Open the SPI Adapter and initialize this Luma serial instance."""
-        self._i2c = I2cAdapter(port)
-        self._addr = int(str(addr), 0)
-        self._cmd_mode = bytes([cmd_mode])
-        self._data_mode = bytes([data_mode])
+        self.__spi = SpiAdapter(port)
+        self.__spi.set_aux_pin_mode(dc_aux_pin, AuxPinMode.OUTPUT)
+        # self._addr = int(str(addr), 0)
+        # self._cmd_mode = bytes([cmd_mode])
+        # self._data_mode = bytes([data_mode])
 
     def command(self, *cmd):
         """Send to the SPI display a command with given bytes."""
-        payload = self._cmd_mode + bytes(list(cmd))
-        assert self._i2c.write(self._addr, payload)
+        self.__spi.write_aux_pins(0 << dc_aux_pin, 1 << dc_aux_pin)
+        payload =  bytes(list(cmd))
+        assert self.__spi.send(payload, read=False) is not None
 
     def data(self, data):
         """Send to the SPI display data with given bytes."""
+        self.__spi.write_aux_pins(1 << dc_aux_pin, 1 << dc_aux_pin)
         i = 0
         n = len(data)
         while i < n:
             # SPI Adapter limits to 256 bytes payload.
             chunk_size = min(255, n - i)
-            payload = self._data_mode + bytes(data[i : i + chunk_size])
-            assert self._i2c.write(self._addr, payload)
+            payload =  bytes(data[i : i + chunk_size])
+            assert self.__spi.send(payload, read=False) is not None
             i += chunk_size
 
 
-luma_serial = MyLumaSerial(my_port, addr=my_oled_addr, cmd_mode=0x00, data_mode=0x40)
-luma_device = sh1106(luma_serial, width=128, height=64, rotate=0)
+luma_serial = MyLumaSerial(my_port)
+# luma_device = sh1106(luma_serial, width=128, height=64, rotate=0)
+luma_device = ssd1306(luma_serial, width=128, height=64, rotate=0)
 # luma_device.persist = True  # Do not clear display on exit
 
 
