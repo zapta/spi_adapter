@@ -1,4 +1,6 @@
 
+* Test spi.send() with data > 256 bytes.
+
 * Resolve the mode transition (Clock level should change before CS active) https://github.com/arduino/ArduinoCore-mbed/issues/828
 
 * Revisit the accuracy of the wire frequency.

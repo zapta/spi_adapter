@@ -50,7 +50,7 @@ class MyLumaSerial:
         """Send to the SPI display a command with given bytes."""
         self.__spi.write_aux_pins(0 << dc_aux_pin, 1 << dc_aux_pin)
         payload =  bytes(list(cmd))
-        assert self.__spi.send(payload, read=False) is not None
+        assert self.__spi.send(payload, read=False, speed=4000000) is not None
 
     def data(self, data):
         """Send to the SPI display data with given bytes."""
@@ -58,10 +58,10 @@ class MyLumaSerial:
         i = 0
         n = len(data)
         while i < n:
-            # SPI Adapter limits to 256 bytes payload.
-            chunk_size = min(255, n - i)
+            # SPI Adapter limits to 1024 bytes payload.
+            chunk_size = min(256, n - i)
             payload =  bytes(data[i : i + chunk_size])
-            assert self.__spi.send(payload, read=False) is not None
+            assert self.__spi.send(payload, read=False, speed=4000000) is not None
             i += chunk_size
 
 

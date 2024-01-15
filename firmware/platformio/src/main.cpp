@@ -179,8 +179,7 @@ static class InfoCommandHandler : public CommandHandler {
 //
 // Error response:
 // - byte 0:    'E' for error.
-// - byte 1:    Additional device specific internal error info per the list
-//              below.
+// - byte 1:    Error code, per the list below, providing more information about the error.
 //
 // OK response
 // - byte 0:    'K' for 'OK'.
@@ -197,7 +196,7 @@ static class InfoCommandHandler : public CommandHandler {
 // 6   : Reserved. Should be 0.
 // 7   : Reserved. Should be 0.
 
-// Additional error response info:
+// Error code:
 //  1 : Data too long
 //  2 : NACK on transmit of address
 //  3 : NACK on transmit of data
@@ -232,16 +231,16 @@ static class SendCommandHandler : public CommandHandler {
       _got_cmd_header = true;
 
       // Validate the command header.
-      uint8_t status =
+      const uint8_t error_code =
           (_speed_units < 1 || _speed_units > 160)      ? 0x0c
           : (_custom_data_count > kMaxTransactionBytes) ? 0x09
           : (_extra_data_count > kMaxTransactionBytes)  ? 0x0a
           : (_custom_data_count + _extra_data_count > kMaxTransactionBytes)
               ? 0x0b
               : 0x00;
-      if (status != 0x00) {
+      if (error_code) {
         Serial.write('E');
-        Serial.write(status);
+        Serial.write(code);
         return true;
       }
     }
@@ -320,13 +319,12 @@ static class SendCommandHandler : public CommandHandler {
 //
 // Error response:
 // - byte 0:    'E' for error.
-// - byte 1:    Additional device specific internal error info per the list
-//              below.
+// - byte 1:    Error code, per the list below, providing more information about the error.
 //
 // OK response
 // - byte 0:    'K' for 'OK'.
 
-// Additional error response info:
+// Error codes:
 //  1 : Pin index out of range.
 //  2 : Mode value out of range.
 static class AuxPinModeCommandHandler : public CommandHandler {
