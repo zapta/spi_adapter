@@ -1,17 +1,15 @@
-// Firmware of the I2C Adapter implementation using a Raspberry Pico.
+// Firmware of the SPI Adapter implementation using a Raspberry Pico.
 
 #include <Arduino.h>
-// #include <Wire.h>
 #include <SPI.h>
 
 #include "board.h"
 
-// TODO: Add support for debug info using an auxilary UART.
 
 // SPI pins:
-//   PIN_SPI_MISO  (16u)
-//   PIN_SPI_MOSI  (19u)
-//   PIN_SPI_SCK   (18u)
+//   PIN_SPI_SCK   GP18
+//   PIN_SPI_MOSI  GP19
+//   PIN_SPI_MISO  GP16
 
 // The four CS output pins.
 static uint8_t cs_pins[] = {
@@ -24,7 +22,6 @@ static uint8_t cs_pins[] = {
 static constexpr uint8_t kNumCsPins = sizeof(cs_pins) / sizeof(*cs_pins);
 static_assert(kNumCsPins == 4);
 
-// using board::i2c;
 using board::led;
 
 static constexpr uint8_t kApiVersion = 1;
@@ -155,22 +152,22 @@ static class InfoCommandHandler : public CommandHandler {
   }
 } info_cmd_handler;
 
-// SEND command. Writes N bytes to an I2C device.
+// SEND command. Send bytes to a device and read the returned bytes.
 //
 // Command:
 // - byte 0:    's'
 // - byte 1:    Config byte, see below
-// - byte 2,3:  Number custom data bytes to write. Big endian. Should be in
-// the
-//              range 0 to (kMaxTransactionBytes - extra_bytes_to_write).
-// - byte 4,5:  Number of extra 0x00 bytes to write. Big endian. should
+// - byte 2:    Speed in 25Khz steps. Valid range is [1, 160]
+// - byte 3,4:  Number custom data bytes to write. Big endian. Should be in
+//              the range 0 to (kMaxTransactionBytes - extra_bytes_to_write).
+// - byte 5,6:  Number of extra 0x00 bytes to write. Big endian. should
 //              range 0 to kMaxTransactionBytes.
-// - Byte 6...  The custom data bytes to write.
+// - Byte 7...  The custom data bytes to write.
 //
 // Error response:
 // - byte 0:    'E' for error.
 // - byte 1:    Additional device specific internal error info per the list
-// below.
+//              below.
 //
 // OK response
 // - byte 0:    'K' for 'OK'.
@@ -193,10 +190,11 @@ static class InfoCommandHandler : public CommandHandler {
 //  3 : NACK on transmit of data
 //  4 : Other error
 //  5 : Timeout
-//  8 : Device address out of range..
-//  9 : Custom byte count out of range.
-// 10 : Extra byte count out of range.
+//  8 : Device address is out of range..
+//  9 : Custom byte count is out of range.
+// 10 : Extra byte count is out of range.
 // 11 : Byte count out of limit
+// 12 : Speed byte is out of range.
 //
 static class SendCommandHandler : public CommandHandler {
  public:
@@ -207,21 +205,22 @@ static class SendCommandHandler : public CommandHandler {
   virtual bool on_cmd_loop() override {
     // Read command header.
     if (!_got_cmd_header) {
-      static_assert(sizeof(data_buffer) >= 5);
-      if (!read_serial_bytes(data_buffer, 5)) {
+      static_assert(sizeof(data_buffer) >= 6);
+      if (!read_serial_bytes(data_buffer, 6)) {
         return false;
       }
       // Parse the command header
-      // _config = data_buffer[0];
       _cs_index = data_buffer[0] & 0b11;
       _spi_mode = (SPIMode)((data_buffer[0] >> 2) & 0b11);
       _return_read_bytes = data_buffer[0] & 0b10000;
-      _custom_data_count = (((uint16_t)data_buffer[1]) << 8) + data_buffer[2];
-      _extra_data_count = (((uint16_t)data_buffer[3]) << 8) + data_buffer[4];
+      _speed_units = data_buffer[1];
+      _custom_data_count = (((uint16_t)data_buffer[2]) << 8) + data_buffer[3];
+      _extra_data_count = (((uint16_t)data_buffer[4]) << 8) + data_buffer[5];
       _got_cmd_header = true;
 
       // Validate the command header.
       uint8_t status =
+          (_speed_units < 1 || _speed_units > 160) ? 0x0c :
           (_custom_data_count > kMaxTransactionBytes)  ? 0x09
           : (_extra_data_count > kMaxTransactionBytes) ? 0x0a
           : (_custom_data_count + _extra_data_count > kMaxTransactionBytes)
@@ -247,10 +246,9 @@ static class SendCommandHandler : public CommandHandler {
     static_assert(sizeof(data_buffer) >= kMaxTransactionBytes);
     memset(&data_buffer[_custom_data_count], 0, _extra_data_count);
 
- 
-
     // Perform the SPI transaction using data_buffer as TX/RX buffer.
-    SPISettings spi_setting(4000000, MSBFIRST, _spi_mode);
+    const uint32_t frequency_hz = ((uint32_t)_speed_units)*25000;
+    SPISettings spi_setting(frequency_hz, MSBFIRST, _spi_mode);
     SPI.beginTransaction(spi_setting);
 
     // SPI.transfer(data_buffer, 0);
@@ -284,6 +282,7 @@ static class SendCommandHandler : public CommandHandler {
   uint8_t _cs_index;
   SPIMode _spi_mode;
   bool _return_read_bytes;
+  uint8_t _speed_units;
   uint16_t _custom_data_count;
   uint16_t _extra_data_count;
 
@@ -292,6 +291,7 @@ static class SendCommandHandler : public CommandHandler {
     _cs_index = 0;
     _spi_mode = SPI_MODE0;
     _return_read_bytes = false;
+    _speed_units = 0;
     _custom_data_count = 0;
     _extra_data_count = 0;
   }

@@ -27,6 +27,7 @@ class SpiAdapter:
         extra_bytes: int,
         cs: int = 0,
         mode: int = 0,
+        speed: int = 4000000,
         return_bytes_read: bool = True
     ) -> Optional[Tuple[bytearray, bytearray]]:
         """Perform an SPI transaction.
@@ -44,6 +45,10 @@ class SpiAdapter:
         
         :param mode: The SPI mode to use. Should be in the range [0, 3].
         :type mode: int
+        
+        :param speed: The SPI speed in Hz and must be in the range 25Khz to 4Mhz. The value 
+                      is rounded silently to a 25Khz increment.
+        :type speed: int
         
         :param return_bytes_read: Indicates if the response should include the bytes read
            on the MISO line during the transaction.
@@ -64,6 +69,8 @@ class SpiAdapter:
         assert 0 <= cs <= 3
         assert isinstance(mode, int)
         assert 0 <= mode <= 3
+        assert isinstance(speed, int)
+        assert 25000 <= speed <= 4000000
         assert isinstance(return_bytes_read, bool)
 
         # Construct and send the command request.
@@ -74,6 +81,11 @@ class SpiAdapter:
         config_byte |= cs 
         print(f"Config byte: {config_byte:08b}", flush=True)
         req.append(config_byte)
+        speed_byte = int(round(speed / 25000))
+        print(f"Speed byte: {speed_byte}, speed={speed}", flush=True)
+        assert isinstance(speed_byte, int)
+        assert 1 <= speed_byte <= 160
+        req.append(speed_byte)
         req.append(len(data) // 256)
         req.append(len(data) % 256)
         req.append(extra_bytes // 256)

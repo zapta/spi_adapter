@@ -1,5 +1,0 @@
-
-* Resolve the mode transition (Clock level should change before CS active)
-
-* Complete documentation
-
