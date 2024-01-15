@@ -1,3 +1,4 @@
 .*.sh
 .DS_Store
+dist
 docs/dist
