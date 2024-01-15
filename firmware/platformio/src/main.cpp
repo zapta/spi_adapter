@@ -5,7 +5,6 @@
 
 #include "board.h"
 
-
 // SPI pins:
 //   PIN_SPI_SCK   GP18
 //   PIN_SPI_MOSI  GP19
@@ -21,6 +20,20 @@ static uint8_t cs_pins[] = {
 
 static constexpr uint8_t kNumCsPins = sizeof(cs_pins) / sizeof(*cs_pins);
 static_assert(kNumCsPins == 4);
+
+static uint8_t aux_pins[] = {
+    0,  // Aux 0 = GP0
+    1,  // Aux 0 = GP1
+    2,  // Aux 0 = GP2
+    3,  // Aux 0 = GP3
+    4,  // Aux 0 = GP4
+    5,  // Aux 0 = GP5
+    6,  // Aux 0 = GP6
+    7,  // Aux 0 = GP7
+};
+
+static constexpr uint8_t kNumAuxPins = sizeof(aux_pins) / sizeof(*aux_pins);
+static_assert(kNumAuxPins == 8);
 
 using board::led;
 
@@ -220,9 +233,9 @@ static class SendCommandHandler : public CommandHandler {
 
       // Validate the command header.
       uint8_t status =
-          (_speed_units < 1 || _speed_units > 160) ? 0x0c :
-          (_custom_data_count > kMaxTransactionBytes)  ? 0x09
-          : (_extra_data_count > kMaxTransactionBytes) ? 0x0a
+          (_speed_units < 1 || _speed_units > 160)      ? 0x0c
+          : (_custom_data_count > kMaxTransactionBytes) ? 0x09
+          : (_extra_data_count > kMaxTransactionBytes)  ? 0x0a
           : (_custom_data_count + _extra_data_count > kMaxTransactionBytes)
               ? 0x0b
               : 0x00;
@@ -247,13 +260,13 @@ static class SendCommandHandler : public CommandHandler {
     memset(&data_buffer[_custom_data_count], 0, _extra_data_count);
 
     // Perform the SPI transaction using data_buffer as TX/RX buffer.
-    const uint32_t frequency_hz = ((uint32_t)_speed_units)*25000;
+    const uint32_t frequency_hz = ((uint32_t)_speed_units) * 25000;
     SPISettings spi_setting(frequency_hz, MSBFIRST, _spi_mode);
     SPI.beginTransaction(spi_setting);
 
     // SPI.transfer(data_buffer, 0);
 
-    // Now that the clock level was adjusted to the mode, turn on the 
+    // Now that the clock level was adjusted to the mode, turn on the
     // CS.
     cs_on(_cs_index);
 
@@ -298,6 +311,155 @@ static class SendCommandHandler : public CommandHandler {
 
 } send_cmd_handler;
 
+// SET AUXILARY PIN MODE command.
+//
+// Command:
+// - byte 0:    'm'
+// - byte 1:    pin index, 0 - 7
+// - byte 2:    pin mode
+//
+// Error response:
+// - byte 0:    'E' for error.
+// - byte 1:    Additional device specific internal error info per the list
+//              below.
+//
+// OK response
+// - byte 0:    'K' for 'OK'.
+
+// Additional error response info:
+//  1 : Pin index out of range.
+//  2 : Mode value out of range.
+static class AuxPinModeCommandHandler : public CommandHandler {
+ public:
+  AuxPinModeCommandHandler() : CommandHandler("AUX_MODE") {}
+
+  virtual bool on_cmd_loop() override {
+    // Read command header.
+    // if (!_got_cmd_header) {
+    static_assert(sizeof(data_buffer) >= 2);
+    if (!read_serial_bytes(data_buffer, 2)) {
+      return false;
+    }
+    // Parse the command header
+    const uint8_t aux_pin_index = data_buffer[0];
+    const uint8_t aux_pin_mode = data_buffer[1];
+
+    // Check aux pin index range.
+    if (aux_pin_index >= kNumAuxPins) {
+      Serial.write('E');
+      Serial.write(0x01);
+      return true;
+    }
+
+    // Map to underlying gpio pin.
+    const uint8_t gpio_pin = aux_pins[aux_pin_index];
+
+    // Dispatch by pin mode:
+    switch (aux_pin_mode) {
+      // Input pulldown
+      case 1:
+        pinMode(gpio_pin, INPUT_PULLDOWN);
+        break;
+
+      // Input pullup
+      case 2:
+        pinMode(gpio_pin, INPUT_PULLUP);
+        break;
+
+      // Output.
+      case 3:
+        pinMode(gpio_pin, OUTPUT);
+        break;
+
+      default:
+        Serial.write('E');
+        Serial.write(0x02);
+        return true;
+    }
+
+    // All done Ok
+    Serial.write('K');
+    return true;
+  }
+
+} aux_mode_cmd_handler;
+
+// READ AUXILARY PINS command.
+//
+// Command:
+// - byte 0:    'a'
+//
+// Error response:
+// - byte 0:    'E' for error.
+// - byte 1:    Reserved. Always 0.
+//
+// OK response
+// - byte 0:    'K' for 'OK'.
+// - byte 1:    Auxilary pins values
+static class AuxPinsReadCommandHandler : public CommandHandler {
+ public:
+  AuxPinsReadCommandHandler() : CommandHandler("AUX_READ") {}
+
+  virtual bool on_cmd_loop() override {
+    uint8_t result = 0;
+    static_assert(kNumAuxPins == 8);
+    for (int i = 7; i >= 0; i--) {
+      const uint8_t gpio_pin = aux_pins[i];
+      const PinStatus pin_status = digitalRead(gpio_pin);
+      result = result << 1;
+      if (pin_status) {
+        result |= 0b00000001;
+      }
+    }
+
+    // All done Ok
+    Serial.write('K');
+    Serial.write(result);
+    return true;
+  }
+
+} aux_pins_read_cmd_handler;
+
+// WRITE AUXILARY PINS command.
+//
+// Command:
+// - byte 0:    'b'
+// - byte 1:    New pins values
+// - byte 2:    Write mask. Only pins with a corresponding '1' are written.
+//
+// Error response:
+// - byte 0:    'E' for error.
+// - byte 1:    Reserved. Always 0.
+//
+// OK response
+// - byte 0:    'K' for 'OK'.
+static class AuxPinsWriteCommandHandler : public CommandHandler {
+ public:
+  AuxPinsWriteCommandHandler() : CommandHandler("AUX_WRITE") {}
+
+  virtual bool on_cmd_loop() override {
+    static_assert(sizeof(data_buffer) >= 2);
+    if (!read_serial_bytes(data_buffer, 2)) {
+      return false;
+    }
+    const uint8_t values = data_buffer[0];
+    const uint8_t mask = data_buffer[1];
+    static_assert(kNumAuxPins == 8);
+    for (int i = 0; i < 8; i++) {
+      if (mask & 1 << i) {
+        const uint8_t gpio_pin = aux_pins[i];
+        // TODO: We write also to input pins. What is the semantic?
+        digitalWrite(gpio_pin, values & 1 << i);
+      }
+    }
+
+    // All done Ok
+    Serial.write('K');
+    return true;
+  }
+
+} aux_pins_write_cmd_handler;
+
 // Given a command char, return a Command pointer or null if invalid command
 // char.
 static CommandHandler* find_command_handler_by_char(const char cmd_char) {
@@ -306,6 +468,12 @@ static CommandHandler* find_command_handler_by_char(const char cmd_char) {
       return &echo_cmd_handler;
     case 'i':
       return &info_cmd_handler;
+    case 'm':
+      return &aux_mode_cmd_handler;
+    case 'a':
+      return &aux_pins_read_cmd_handler;
+    case 'b':
+      return &aux_pins_write_cmd_handler;
     case 's':
       return &send_cmd_handler;
     default:

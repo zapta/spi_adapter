@@ -1,7 +1,7 @@
 #!python
 
-# This program demonstrates how to use the I2CAdapter to allow the luma.oled
-# package to draw on an I2C Oled display. In this example we use a 128x64
+# This program demonstrates how to use the SpiAdapter to allow the luma.oled
+# package to draw on an SPI Oled display. In this example we use a 128x64
 # SH1106 display.
 
 import time
@@ -15,7 +15,7 @@ from PIL import ImageFont, ImageColor
 
 # Related readings
 # - https://buildmedia.readthedocs.org/media/pdf/luma-oled/rtd-update/luma-oled.pdf
-# - https://github.com/rm-hull/luma.core/blob/master/luma/core/interface/serial.py#L25
+# - https://github.com/rm-hull/luma.core/blob/master/luma/core/interface/serial.py#L260
 # - https://github.com/rm-hull/luma.examples/blob/master/examples/sys_info.py
 # - https://github.com/rm-hull/luma.examples/tree/master/examples
 # - https://luma-oled.readthedocs.io/en/latest/
@@ -28,28 +28,28 @@ my_oled_addr = 0x3C
 
 
 class MyLumaSerial:
-    """Implementation of the luma.core.interface.serial interface using an I2C Adapter.
+    """Implementation of the luma.core.interface.serial interface using an SPI Adapter.
     See luma.core.interface.serial.i2c for an example.
     """
 
     def __init__(self, port: str, addr: int, cmd_mode: int, data_mode: int):
-        """Open the I2C Adapter and initialize this Luma serial instance."""
+        """Open the SPI Adapter and initialize this Luma serial instance."""
         self._i2c = I2cAdapter(port)
         self._addr = int(str(addr), 0)
         self._cmd_mode = bytes([cmd_mode])
         self._data_mode = bytes([data_mode])
 
     def command(self, *cmd):
-        """Send to the I2C display a command with given bytes."""
+        """Send to the SPI display a command with given bytes."""
         payload = self._cmd_mode + bytes(list(cmd))
         assert self._i2c.write(self._addr, payload)
 
     def data(self, data):
-        """Send to the I2C display data with given bytes."""
+        """Send to the SPI display data with given bytes."""
         i = 0
         n = len(data)
         while i < n:
-            # I2C Adapter limits to 256 bytes payload.
+            # SPI Adapter limits to 256 bytes payload.
             chunk_size = min(255, n - i)
             payload = self._data_mode + bytes(data[i : i + chunk_size])
             assert self._i2c.write(self._addr, payload)
@@ -73,7 +73,7 @@ while True:
     # upon exiting the 'with' clause.
     with canvas(luma_device) as draw:
         draw.rectangle(luma_device.bounding_box, outline=white, fill=black)
-        draw.text((20, 14), f"I2C Adapter", fill=white, font=font1)
+        draw.text((20, 14), f"SPI Adapter", fill=white, font=font1)
         draw.text((33, 40), f"{time_str}", fill=white, font=font2)
         # Uncomment to save screenshot.
         # draw._image.save("oled_demo_screenshot.png")

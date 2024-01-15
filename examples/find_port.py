@@ -1,6 +1,6 @@
 #!python
 
-# TODO: Develope the idea of finding I2C Adapter devices.
+# TODO: Develope the idea of identifying automatically the I2C Adapter devices.
 
 import serial.tools.list_ports
 

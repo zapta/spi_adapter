@@ -1,4 +1,4 @@
-i2c-adapter
+spi-adapter
 luma.oled
 luma.core
 pillow
