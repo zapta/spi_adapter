@@ -27,8 +27,8 @@ class SpiAdapter:
         extra_bytes: int,
         cs: int = 0,
         mode: int = 0,
-        speed: int = 4000000,
-        return_bytes_read: bool = True
+        speed: int = 1000000,
+        read: bool = True
     ) -> Optional[Tuple[bytearray, bytearray]]:
         """Perform an SPI transaction.
 
@@ -50,14 +50,14 @@ class SpiAdapter:
                       is rounded silently to a 25Khz increment.
         :type speed: int
         
-        :param return_bytes_read: Indicates if the response should include the bytes read
-           on the MISO line during the transaction.
-        :type return_bytes_read: bool
+        :param read: Indicates if the response should include the bytes read
+           on the MISO line during the writing of ``data`` and ``extra_bytes``.
+        :type read: bool
 
-        :returns: If error, returns None, otherwise returns a ``bytearray``. If ``return_read_bytes == True``
+        :returns: If error, returns None, otherwise returns a ``bytearray``. If ``read == True``
            then the bytearray contains exactly ``len(data) + extra_bytes`` bytes that were read during
-           the transaction. Otherwise the bytearray is empty(). Not requesting the read bytes can result
-           in performance improvements with large write_only transactions.
+           the transaction. Otherwise the bytearray is empty(). Skipping the reading may improve 
+           the performance of large write only transactions.
         :rtype: bytearray | None
         """
         assert isinstance(data, (bytearray, bytes))
@@ -71,18 +71,19 @@ class SpiAdapter:
         assert 0 <= mode <= 3
         assert isinstance(speed, int)
         assert 25000 <= speed <= 4000000
-        assert isinstance(return_bytes_read, bool)
+        assert isinstance(read, bool)
 
         # Construct and send the command request.
         req = bytearray()
         req.append(ord("s"))
-        config_byte = 0b10000 if return_bytes_read else 0b00000
+        # print(f"Read: {read}", flush=True)
+        config_byte = 0b10000 if read else 0b00000
         config_byte |= mode << 2
         config_byte |= cs 
-        print(f"Config byte: {config_byte:08b}", flush=True)
+        # print(f"Config byte: {config_byte:08b}", flush=True)
         req.append(config_byte)
         speed_byte = int(round(speed / 25000))
-        print(f"Speed byte: {speed_byte}, speed={speed}", flush=True)
+        # print(f"Speed byte: {speed_byte}, speed={speed}", flush=True)
         assert isinstance(speed_byte, int)
         assert 1 <= speed_byte <= 160
         req.append(speed_byte)
@@ -136,7 +137,7 @@ class SpiAdapter:
             )
             return None
         resp_count = (resp[0] << 8) + resp[1]
-        expected_resp_count = len(data) + extra_bytes
+        expected_resp_count = len(data) + extra_bytes if read else 0
         if resp_count != expected_resp_count:
             print(
                 f"SPI read: response count mismatch, expected {expected_resp_count}, got {resp_count}",
