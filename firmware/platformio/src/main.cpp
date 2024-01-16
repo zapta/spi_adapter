@@ -5,6 +5,10 @@
 
 #include "board.h"
 
+#pragma GCC push_options
+#pragma GCC optimize("Og")
+
+
 // SPI pins:
 //   PIN_SPI_SCK   GP18
 //   PIN_SPI_MOSI  GP19
@@ -41,7 +45,9 @@ static constexpr uint8_t kApiVersion = 1;
 static constexpr uint16_t kFirmwareVersion = 1;
 
 // Max number of bytes per transaction.
-static constexpr uint16_t kMaxTransactionBytes = 1024;
+// NOTE: We have an issue with custom data larger than 256 bytes so for now
+// we limit the trnasaction size to 256 bytes. If needed, fix it and increase.
+static constexpr uint16_t kMaxTransactionBytes = 256;
 
 // All command bytes must arrive within this time period.
 static constexpr uint32_t kCommandTimeoutMillis = 250;
@@ -87,7 +93,8 @@ static inline void cs_on(uint8_t cs_index) {
 static Timer cmd_timer;
 
 // Read exactly n chanrs to data buffer. If not enough bytes, none is read
-// and the function returns false.
+// and the function returns false. This seems to be OK for sizes up to 
+// 256 bytes. For larger size may need to read in chunks.
 static bool read_serial_bytes(uint8_t* bfr, uint16_t n) {
   // Handle the case where not enough chars.
   const int avail = Serial.available();
@@ -240,7 +247,7 @@ static class SendCommandHandler : public CommandHandler {
               : 0x00;
       if (error_code) {
         Serial.write('E');
-        Serial.write(code);
+        Serial.write(error_code);
         return true;
       }
     }

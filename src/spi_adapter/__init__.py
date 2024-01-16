@@ -38,6 +38,8 @@ class SpiAdapter:
         assert isinstance(ok_resp_size, int)
         assert 0 <= ok_resp_size
         # Read status flag.
+        # time.sleep(0.5)
+        # print(f"Timeout: {self.__serial.timeout}", flush=True)
         ok_resp = self.__serial.read(1)
         assert isinstance(ok_resp, bytes), type(ok_resp)
         if len(ok_resp) != 1:
@@ -91,11 +93,11 @@ class SpiAdapter:
     ) -> bytearray | None:
         """Perform an SPI transaction.
 
-        :param write_data: Bytes to write to the device. The number of bytes must be 1024 at most.
+        :param write_data: Bytes to write to the device. The number of bytes must be 256 at most.
         :type write_data: bytearray | bytes | None
 
         :param extra_bytes: Number of additional ``0x00`` bytes to write to the device. This is typically use to read
-          a response from the device. The value ``len(data) + extra_bytes`` should not exceed 1024.
+          a response from the device. The value ``len(data) + extra_bytes`` should not exceed 256.
         :type extra_bytes: int
 
         :param cs: The Chip Select (CS) output to use for this transaction. This allows to connect the SPI Adapter to multiple
@@ -120,10 +122,10 @@ class SpiAdapter:
         :rtype: bytearray | None
         """
         assert isinstance(data, (bytearray, bytes))
-        assert len(data) <= 1024
+        assert len(data) <= 256
         assert isinstance(extra_bytes, int)
-        assert 0 <= extra_bytes <= 1024
-        assert (len(data) + extra_bytes) <= 1024
+        assert 0 <= extra_bytes <= 256
+        assert (len(data) + extra_bytes) <= 256
         assert isinstance(cs, int)
         assert 0 <= cs <= 3
         assert isinstance(mode, int)

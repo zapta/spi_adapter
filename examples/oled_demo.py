@@ -58,7 +58,7 @@ class MyLumaSerial:
         i = 0
         n = len(data)
         while i < n:
-            # SPI Adapter limits to 1024 bytes payload.
+            # SPI Adapter limits to 256 bytes payload.
             chunk_size = min(256, n - i)
             payload =  bytes(data[i : i + chunk_size])
             assert self.__spi.send(payload, read=False, speed=4000000) is not None
