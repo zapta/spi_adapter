@@ -5,16 +5,15 @@
 
 #include "board.h"
 
-#pragma GCC push_options
-#pragma GCC optimize("Og")
-
+// #pragma GCC push_options
+// #pragma GCC optimize("Og")
 
 // SPI pins:
 //   PIN_SPI_SCK   GP18
 //   PIN_SPI_MOSI  GP19
 //   PIN_SPI_MISO  GP16
 
-// The four CS output pins.
+// Maps CS pin index to gp pin index.
 static uint8_t cs_pins[] = {
     20,  // CS 0 = GP20
     21,  // CS 1 = GP21
@@ -25,6 +24,7 @@ static uint8_t cs_pins[] = {
 static constexpr uint8_t kNumCsPins = sizeof(cs_pins) / sizeof(*cs_pins);
 static_assert(kNumCsPins == 4);
 
+// Maps aux pin index to gp pin index.
 static uint8_t aux_pins[] = {
     0,  // Aux 0 = GP0
     1,  // Aux 0 = GP1
@@ -500,10 +500,16 @@ void setup() {
 
   // Init CS outputs.
   for (uint8_t i = 0; i < kNumCsPins; i++) {
-    auto cs_pin = cs_pins[i];
-    pinMode(cs_pin, OUTPUT);
+    auto gp_pin = cs_pins[i];
+    pinMode(gp_pin, OUTPUT);
   }
   all_cs_off();
+
+  // Init aux pins as inputs.
+  for (uint8_t i = 0; i < kNumAuxPins; i++) {
+    auto gp_pin = aux_pins[i];
+    pinMode(gp_pin, INPUT_PULLUP) ;
+  }
 
   // Initialize the SPI channel.
   SPI.begin();
