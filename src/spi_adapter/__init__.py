@@ -11,6 +11,7 @@ import time
 # NOTE: Numeric values match wire protocol.
 class AuxPinMode(Enum):
     """Auxilary pin modes."""
+
     INPUT_PULLDOWN = 1
     INPUT_PULLUP = 2
     OUTPUT = 3
@@ -30,8 +31,9 @@ class SpiAdapter:
         if not self.test_connection_to_adapter():
             raise RuntimeError(f"spi driver not detected at port {port}")
 
-    def __read_response(self, op_name: str, ok_resp_size: int) -> bytearray:
-        """A common method to read a response from the adapter."""
+    def __read_adapter_response(self, op_name: str, ok_resp_size: int) -> bytes:
+        """A common method to read a response from the adapter.
+        Returns None if error, otherwise OK response bytes"""
         assert isinstance(op_name, str)
         assert isinstance(ok_resp_size, int)
         assert 0 <= ok_resp_size
@@ -62,7 +64,7 @@ class SpiAdapter:
                     flush=True,
                 )
                 return None
-            print(f"{op_name}: failed with status = {ok_resp[0]:02x}", flush=True)
+            print(f"{op_name}: failed with error code {ok_resp[0]}", flush=True)
             return None
 
         # Handle the OK case.
@@ -72,7 +74,7 @@ class SpiAdapter:
         assert isinstance(ok_resp, bytes), type(ok_resp)
         if len(ok_resp) != ok_resp_size:
             print(
-                f"{op_name}: error count read mismatch, expected {ok_resp_size}, got {len(ok_resp)}",
+                f"{op_name}: OK resp read count mismatch, expected {ok_resp_size}, got {len(ok_resp)}",
                 flush=True,
             )
             return None
@@ -155,7 +157,7 @@ class SpiAdapter:
             return None
 
         # Read response.
-        ok_resp = self.__read_response("SPI read", 2)
+        ok_resp = self.__read_adapter_response("SPI read", 2)
         if ok_resp is None:
             return None
 
@@ -200,7 +202,7 @@ class SpiAdapter:
         req.append(pin)
         req.append(pin_mode.value)
         self.__serial.write(req)
-        ok_resp = self.__read_response("Aux mode", 0)
+        ok_resp = self.__read_adapter_response("Aux mode", 0)
         if ok_resp is None:
             return False
         return True
@@ -214,7 +216,7 @@ class SpiAdapter:
         req = bytearray()
         req.append(ord("a"))
         self.__serial.write(req)
-        ok_resp = self.__read_response("Aux read", 1)
+        ok_resp = self.__read_adapter_response("Aux read", 1)
         if ok_resp is None:
             return None
         return ok_resp[0]
@@ -241,7 +243,7 @@ class SpiAdapter:
         req.append(values)
         req.append(mask)
         self.__serial.write(req)
-        ok_resp = self.__read_response("Aux write", 0)
+        ok_resp = self.__read_adapter_response("Aux write", 0)
         if ok_resp is None:
             return False
         return True
