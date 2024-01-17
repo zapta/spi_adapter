@@ -1,4 +1,6 @@
 
+* Cleanup the SPI mode change.
+
 * Complete examples
 
 * Complete documentation

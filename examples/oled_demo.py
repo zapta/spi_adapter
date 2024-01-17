@@ -41,13 +41,11 @@ class MyLumaSerial:
     def __init__(self, port: str):
         """Open the SPI Adapter and initialize this Luma serial instance."""
         self.__spi = SpiAdapter(port)
+        self.__spi.send(bytearray())
         self.__spi.set_aux_pin_mode(dc_aux_pin, AuxPinMode.OUTPUT)
         self.__spi.set_aux_pin_mode(nrst_aux_pin, AuxPinMode.OUTPUT)
-        time.sleep(0.1)
         self.__spi.write_aux_pin(nrst_aux_pin, 0)
-        time.sleep(0.1)
         self.__spi.write_aux_pin(nrst_aux_pin, 1)
-        time.sleep(0.1)
 
     def command(self, *cmd):
         """Send to the SPI display a command with given bytes."""
@@ -90,3 +88,4 @@ while True:
         # Uncomment to save screenshot.
         # draw._image.save("oled_demo_screenshot.png")
     time.sleep(1.0)
+    
