@@ -1,4 +1,4 @@
-#!python
+#!/usr/bin/env python
 
 # Build the platformio targets and copy their firmware images to ../release.
 

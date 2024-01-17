@@ -58,6 +58,8 @@ static bool last_led_state;
 
 // A temporary buffer for commands and SPI operations.
 static uint8_t data_buffer[kMaxTransactionBytes];
+// The number of valid bytes in data_buffer.
+static uint16_t data_size = 0;
 
 // A simple timer.
 // Cveate: overflows 50 days after last reset().
@@ -92,20 +94,20 @@ static inline void cs_on(uint8_t cs_index) {
 // Time since the start of last cmd.
 static Timer cmd_timer;
 
-// Read exactly n chanrs to data buffer. If not enough bytes, none is read
-// and the function returns false. This seems to be OK for sizes up to 
-// 256 bytes. For larger size may need to read in chunks.
-static bool read_serial_bytes(uint8_t* bfr, uint16_t n) {
+// Fill data_buffer with n bytes. Done in chunks. data_size tracks the
+// num of bytes read so far.
+static bool read_serial_bytes(uint16_t n) {
   // Handle the case where not enough chars.
-  const int avail = Serial.available();
-  if (avail < (int)n) {
-    return false;
+  const uint16_t avail = Serial.available();
+  const uint16_t required = n - data_size;
+  const uint16_t requested = std::min(avail, required);
+
+  if (requested) {
+    size_t actual_read = Serial.readBytes((char*)(&data_buffer[data_size]), requested);
+    data_size += actual_read;
   }
 
-  // TODO: Verify actual read == n;
-  size_t actual_read = Serial.readBytes((char*)bfr, n);
-  (void)actual_read;
-  return true;
+  return data_size >= n;
 }
 
 // Abstract base of all command handlers.
@@ -139,7 +141,7 @@ static class EchoCommandHandler : public CommandHandler {
   EchoCommandHandler() : CommandHandler("ECHO") {}
   virtual bool on_cmd_loop() override {
     static_assert(sizeof(data_buffer) >= 1);
-    if (!read_serial_bytes(data_buffer, 1)) {
+    if (!read_serial_bytes(1)) {
       return false;
     }
     Serial.write(data_buffer[0]);
@@ -225,7 +227,7 @@ static class SendCommandHandler : public CommandHandler {
     // Read command header.
     if (!_got_cmd_header) {
       static_assert(sizeof(data_buffer) >= 6);
-      if (!read_serial_bytes(data_buffer, 6)) {
+      if (!read_serial_bytes(6)) {
         return false;
       }
       // Parse the command header
@@ -255,7 +257,7 @@ static class SendCommandHandler : public CommandHandler {
     // We have a valid header. Now read the custom data bytes, if any.
     static_assert(sizeof(data_buffer) >= kMaxTransactionBytes);
     if (_custom_data_count) {
-      if (!read_serial_bytes(data_buffer, _custom_data_count)) {
+      if (!read_serial_bytes(_custom_data_count)) {
         return false;
       }
     }
@@ -342,7 +344,7 @@ static class AuxPinModeCommandHandler : public CommandHandler {
     // Read command header.
     // if (!_got_cmd_header) {
     static_assert(sizeof(data_buffer) >= 2);
-    if (!read_serial_bytes(data_buffer, 2)) {
+    if (!read_serial_bytes(2)) {
       return false;
     }
     // Parse the command header
@@ -444,7 +446,7 @@ static class AuxPinsWriteCommandHandler : public CommandHandler {
 
   virtual bool on_cmd_loop() override {
     static_assert(sizeof(data_buffer) >= 2);
-    if (!read_serial_bytes(data_buffer, 2)) {
+    if (!read_serial_bytes(2)) {
       return false;
     }
     const uint8_t values = data_buffer[0];
@@ -555,7 +557,8 @@ void loop() {
 
   // Try to read selection char of next command.
   static_assert(sizeof(data_buffer) >= 1);
-  if (!read_serial_bytes(data_buffer, 1)) {
+  data_size = 0;
+  if (!read_serial_bytes(1)) {
     return;
   }
 
@@ -563,6 +566,7 @@ void loop() {
   current_cmd = find_command_handler_by_char(data_buffer[0]);
   if (current_cmd) {
     cmd_timer.reset(millis_now);
+    data_size = 0;
     current_cmd->on_cmd_entered();
     // We call on_cmd_loop() on the next iteration, after updating the LED.
   } else {
