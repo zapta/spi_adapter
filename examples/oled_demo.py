@@ -41,7 +41,7 @@ class MyLumaSerial:
     def __init__(self, port: str):
         """Open the SPI Adapter and initialize this Luma serial instance."""
         self.__spi = SpiAdapter(port)
-        self.__spi.send(bytearray())
+        self.__spi.send(bytearray()) # Force the default SPI mode.
         self.__spi.set_aux_pin_mode(dc_aux_pin, AuxPinMode.OUTPUT)
         self.__spi.set_aux_pin_mode(nrst_aux_pin, AuxPinMode.OUTPUT)
         self.__spi.write_aux_pin(nrst_aux_pin, 0)
