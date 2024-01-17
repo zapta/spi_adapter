@@ -61,6 +61,28 @@ static uint8_t data_buffer[kMaxTransactionBytes];
 // The number of valid bytes in data_buffer.
 static uint16_t data_size = 0;
 
+// Tracks the last spi mode we used. Used to implement a woraround for
+// clock polarity change which requires changing the idle SPI clock
+// level. See https://github.com/arduino/ArduinoCore-mbed/issues/828
+static SPIMode last_spi_mode = SPI_MODE1;
+
+static void track_spi_clock_polarity(SPIMode new_spi_mode) {
+  // No change.
+  if (new_spi_mode == last_spi_mode) {
+    return;
+  }
+
+  // Perform a dummy transaction to settle the clock level.
+  SPISettings spi_setting(4000000, MSBFIRST, new_spi_mode);
+  SPI.beginTransaction(spi_setting);
+  uint8_t dummy_byte = 0;
+  SPI.transfer(&dummy_byte, 0);
+  SPI.endTransaction();
+
+  // Update
+  last_spi_mode = new_spi_mode;
+}
+
 // A simple timer.
 // Cveate: overflows 50 days after last reset().
 class Timer {
@@ -169,10 +191,10 @@ static class InfoCommandHandler : public CommandHandler {
  public:
   InfoCommandHandler() : CommandHandler("INFO") {}
   virtual bool on_cmd_loop() override {
-    Serial.write('K');                      // 'K' for OK.
-    Serial.write('S');                     
-    Serial.write('P');                     
-    Serial.write('I');                     
+    Serial.write('K');  // 'K' for OK.
+    Serial.write('S');
+    Serial.write('P');
+    Serial.write('I');
     Serial.write(0x03);                     // Number of bytes to follow.
     Serial.write(kApiVersion);              // API version.
     Serial.write(kFirmwareVersion >> 8);    // Firmware version MSB.
@@ -276,16 +298,15 @@ static class SendCommandHandler : public CommandHandler {
     static_assert(sizeof(data_buffer) >= kMaxTransactionBytes);
     memset(&data_buffer[_custom_data_count], 0, _extra_data_count);
 
+    // If changing mode, update the clock idle clock level.
+    track_spi_clock_polarity(_spi_mode);
+
     // Perform the SPI transaction using data_buffer as TX/RX buffer.
     const uint32_t frequency_hz = ((uint32_t)_speed_units) * 25000;
     SPISettings spi_setting(frequency_hz, MSBFIRST, _spi_mode);
-    SPI.beginTransaction(spi_setting);
 
-    // SPI.transfer(data_buffer, 0);
-
-    // Now that the clock level was adjusted to the mode, turn on the
-    // CS.
     cs_on(_cs_index);
+    SPI.beginTransaction(spi_setting);
 
     // Perofrm the transaction, using data_buffer and both TX and RX buffer.
     const uint16_t total_bytes = _custom_data_count + _extra_data_count;
@@ -519,11 +540,12 @@ void setup() {
   // Init aux pins as inputs.
   for (uint8_t i = 0; i < kNumAuxPins; i++) {
     auto gp_pin = aux_pins[i];
-    pinMode(gp_pin, INPUT_PULLUP) ;
+    pinMode(gp_pin, INPUT_PULLUP);
   }
 
   // Initialize the SPI channel.
   SPI.begin();
+  track_spi_clock_polarity(SPI_MODE0);
 }
 
 // If in command, points to the command handler.
