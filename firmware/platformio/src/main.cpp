@@ -103,7 +103,8 @@ static bool read_serial_bytes(uint16_t n) {
   const uint16_t requested = std::min(avail, required);
 
   if (requested) {
-    size_t actual_read = Serial.readBytes((char*)(&data_buffer[data_size]), requested);
+    size_t actual_read =
+        Serial.readBytes((char*)(&data_buffer[data_size]), requested);
     data_size += actual_read;
   }
 
@@ -156,17 +157,23 @@ static class EchoCommandHandler : public CommandHandler {
 // - byte 0:  'i'
 //
 // Response:
-// - byte 0:  Number of bytes to follow (3).
-// - byte 1:  Version of wire format API.
-// - byte 2:  MSB of firmware version.
-// - byte 3:  LSB of firmware version.
+// - byte 0:  'K' for OK.
+// - byte 1:  'S'
+// - byte 2:  'P'
+// - byte 3:  'I'
+// - byte 4:  Number of bytes to follow (3).
+// - byte 5:  Version of wire format API.
+// - byte 6:  MSB of firmware version.
+// - byte 7:  LSB of firmware version.
 static class InfoCommandHandler : public CommandHandler {
  public:
   InfoCommandHandler() : CommandHandler("INFO") {}
   virtual bool on_cmd_loop() override {
-    Serial.write(0x05);                     // Number of bytes to follow.
-    Serial.write(0x12);                     // Magic number. MSB
-    Serial.write(0x34);                     // Magic Number. LSB
+    Serial.write('K');                      // 'K' for OK.
+    Serial.write('S');                     
+    Serial.write('P');                     
+    Serial.write('I');                     
+    Serial.write(0x03);                     // Number of bytes to follow.
     Serial.write(kApiVersion);              // API version.
     Serial.write(kFirmwareVersion >> 8);    // Firmware version MSB.
     Serial.write(kFirmwareVersion & 0x08);  // Firmware version LSB.
@@ -188,7 +195,8 @@ static class InfoCommandHandler : public CommandHandler {
 //
 // Error response:
 // - byte 0:    'E' for error.
-// - byte 1:    Error code, per the list below, providing more information about the error.
+// - byte 1:    Error code, per the list below, providing more information about
+// the error.
 //
 // OK response
 // - byte 0:    'K' for 'OK'.
@@ -237,6 +245,7 @@ static class SendCommandHandler : public CommandHandler {
       _speed_units = data_buffer[1];
       _custom_data_count = (((uint16_t)data_buffer[2]) << 8) + data_buffer[3];
       _extra_data_count = (((uint16_t)data_buffer[4]) << 8) + data_buffer[5];
+      data_size = 0;
       _got_cmd_header = true;
 
       // Validate the command header.
@@ -328,7 +337,7 @@ static class SendCommandHandler : public CommandHandler {
 //
 // Error response:
 // - byte 0:    'E' for error.
-// - byte 1:    Error code, per the list below, providing more information about the error.
+// - byte 1:    Error code, per the list below.
 //
 // OK response
 // - byte 0:    'K' for 'OK'.

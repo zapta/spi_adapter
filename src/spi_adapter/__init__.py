@@ -30,6 +30,17 @@ class SpiAdapter:
         self.__serial: Serial = Serial(port, timeout=1.0)
         if not self.test_connection_to_adapter():
             raise RuntimeError(f"spi driver not detected at port {port}")
+        adapter_info = self.__read_adapter_info()
+        if adapter_info is None:
+            raise RuntimeError(f"SPI driver failed to read adapter info at {port}")
+        print(f"Adapter info: {adapter_info.hex(" ")}", flush=True)
+        if (
+            adapter_info[0] != ord("S")
+            or adapter_info[1] != ord("P")
+            or adapter_info[2] != ord("I")
+            or adapter_info[3] != 0x3
+        ):
+            raise RuntimeError(f"Unexpected SPI adapter info at {port}")
 
     def __read_adapter_response(self, op_name: str, ok_resp_size: int) -> bytes:
         """A common method to read a response from the adapter.
@@ -227,7 +238,7 @@ class SpiAdapter:
         """Writes the aux pins.
 
         :param values: An 8 bits integer with the bit values to write. In the range [0, 255].
-        :type pin: int
+        :type values: int
 
         :param mask: An 8 bits int with mask that indicates which auxilary pins should be written. If
             the corresponding bits is 1 than the pin is updated otherwise it's left as is.
@@ -244,6 +255,34 @@ class SpiAdapter:
         req.append(ord("b"))
         req.append(values)
         req.append(mask)
+        self.__serial.write(req)
+        ok_resp = self.__read_adapter_response("Aux write", 0)
+        if ok_resp is None:
+            return False
+        return True
+      
+      
+    def write_aux_pin(self, aux_pin_index, value: bool | int) -> bool:
+        """Writes a single aux pin.
+
+        :param aux_pin_index: An aux pin index in the range [0, 7]
+        :type aux_pin_index: int
+
+        :param value: The value to write.
+        :type value: bool | int
+
+        :returns: True if OK, False otherwise.
+        :rtype: bool
+        """
+        assert isinstance(aux_pin_index, int)
+        assert 0 <= aux_pin_index <= 7
+        assert isinstance(value, (bool, int))
+        req = bytearray()
+        req.append(ord("b"))
+        mask_byte = 1 << aux_pin_index
+        values_byte = mask_byte if value else 0
+        req.append(values_byte)
+        req.append(mask_byte)
         self.__serial.write(req)
         ok_resp = self.__read_adapter_response("Aux write", 0)
         if ok_resp is None:
@@ -291,3 +330,17 @@ class SpiAdapter:
         assert isinstance(resp, bytes), type(resp)
         assert len(resp) == 1
         return resp[0] == b
+
+    def __read_adapter_info(self) -> Optional[bytearray]:
+        """Return adapter info or None if an error."""
+        req = bytearray()
+        req.append(ord("i"))
+        n = self.__serial.write(req)
+        if n != len(req):
+            print(
+                f"SPI adapter info: write mismatch, expected {len(req)}, got {n}",
+                flush=True,
+            )
+            return None
+        ok_resp = self.__read_adapter_response("SPI adapter info", ok_resp_size=7)
+        return ok_resp

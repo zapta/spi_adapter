@@ -7,8 +7,7 @@
 import time
 import datetime
 
-# from i2c_adapter import I2cAdapter
-from luma.oled.device import sh1106, ssd1306
+from luma.oled.device import ssd1306
 from luma.core.render import canvas
 from PIL import ImageFont, ImageColor
 
@@ -29,6 +28,7 @@ from spi_adapter import SpiAdapter, AuxPinMode
 # Customize for your system.
 my_port = "COM18"
 dc_aux_pin = 0
+nrst_aux_pin = 1
 
 # my_oled_addr = 0x3C
 
@@ -42,9 +42,12 @@ class MyLumaSerial:
         """Open the SPI Adapter and initialize this Luma serial instance."""
         self.__spi = SpiAdapter(port)
         self.__spi.set_aux_pin_mode(dc_aux_pin, AuxPinMode.OUTPUT)
-        # self._addr = int(str(addr), 0)
-        # self._cmd_mode = bytes([cmd_mode])
-        # self._data_mode = bytes([data_mode])
+        self.__spi.set_aux_pin_mode(nrst_aux_pin, AuxPinMode.OUTPUT)
+        time.sleep(0.1)
+        self.__spi.write_aux_pin(nrst_aux_pin, 0)
+        time.sleep(0.1)
+        self.__spi.write_aux_pin(nrst_aux_pin, 1)
+        time.sleep(0.1)
 
     def command(self, *cmd):
         """Send to the SPI display a command with given bytes."""
@@ -66,7 +69,6 @@ class MyLumaSerial:
 
 
 luma_serial = MyLumaSerial(my_port)
-# luma_device = sh1106(luma_serial, width=128, height=64, rotate=0)
 luma_device = ssd1306(luma_serial, width=128, height=64, rotate=0)
 # luma_device.persist = True  # Do not clear display on exit
 
