@@ -18,10 +18,11 @@ config_byte_lsb = 0b10001010
 cmd = bytes([config_byte_msb, config_byte_lsb, 0x00, 0x00])
 
 while True:
-  resp = spi.send(cmd)
-  assert isinstance(resp, bytes)
+  resp = spi.send(cmd, mode=1)
+  assert isinstance(resp, bytearray), type(resp)
   assert len(resp) == 4
-  print(f"{i:04d} Response: {result.hex(' ')}", flush=True)
   value = int.from_bytes(resp[0:2], byteorder='big', signed=True)
+  print(f"Response: {resp.hex(' ')} : {value:6d}", flush=True)
+
   time.sleep(0.5)
 

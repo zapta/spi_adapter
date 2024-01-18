@@ -41,12 +41,12 @@ from spi_adapter import SpiAdapter
 
 spi =  SpiAdapter(port = "COM18)
 
-# Single shot, 2.046v FS, A0 input.
+# Single shot, 2.046v FS, Input (A0, GND).
 adc_cmd = bytes([0b11000101, 0b10001010, 0x00, 0x00])
 
 while True:
-  # Read revious value and start a the next converson.
-  response_bytes = spi.send(adc_cmd)
+  # Read previous value and start a the next conversion.
+  response_bytes = spi.send(adc_cmd, mode=1)
   adc_value = int.from_bytes(response_bytes[0:2], byteorder='big', signed=True)
   print(f"ADC: {adc_value}", flush=True)
   time.sleep(0.5)
