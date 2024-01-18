@@ -7,13 +7,13 @@
 import time
 import datetime
 
+# import sys
+# sys.path.insert(0, '../src/')
+
+from spi_adapter import SpiAdapter, AuxPinMode
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 from PIL import ImageFont, ImageColor
-
-import sys
-sys.path.insert(0, '../src/')
-from spi_adapter import SpiAdapter, AuxPinMode
 
 
 # Related readings

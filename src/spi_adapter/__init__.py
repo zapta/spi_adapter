@@ -49,8 +49,6 @@ class SpiAdapter:
         assert isinstance(ok_resp_size, int)
         assert 0 <= ok_resp_size
         # Read status flag.
-        # time.sleep(0.5)
-        # print(f"Timeout: {self.__serial.timeout}", flush=True)
         ok_resp = self.__serial.read(1)
         assert isinstance(ok_resp, bytes), type(ok_resp)
         if len(ok_resp) != 1:

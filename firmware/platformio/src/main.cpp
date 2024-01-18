@@ -8,6 +8,10 @@
 // #pragma GCC push_options
 // #pragma GCC optimize("Og")
 
+using board::led;
+
+
+
 // SPI pins:
 //   PIN_SPI_SCK   GP18
 //   PIN_SPI_MOSI  GP19
@@ -38,8 +42,6 @@ static uint8_t aux_pins[] = {
 
 static constexpr uint8_t kNumAuxPins = sizeof(aux_pins) / sizeof(*aux_pins);
 static_assert(kNumAuxPins == 8);
-
-using board::led;
 
 static constexpr uint8_t kApiVersion = 1;
 static constexpr uint16_t kFirmwareVersion = 1;

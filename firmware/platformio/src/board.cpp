@@ -37,25 +37,21 @@ namespace board {
 
 #ifdef BOARD_RASPBERRY_PICO
 static SimpleLed _led(25);
-// TwoWire i2c(4, 5);
 void setup() {}
 #endif
 
 #ifdef BOARD_SPARKFUN_PRO_MICRO_RP2040
 static NeoPixelLed _led(25);
-// TwoWire i2c(16, 17);
 void setup() {}
 #endif
 
 #ifdef ADAFRUIT_KB2040
 static NeoPixelLed _led(17);
-// TwoWire i2c(12, 13);
 void setup() {}
 #endif
 
 #ifdef ADAFRUIT_QT_PY_RP2040
 static NeoPixelLed _led(12);
-// TwoWire i2c(22, 23);
 void setup() {
   // Pin 11 is used to power the neo pixel so needs to be high.
   pinMode(11, OUTPUT);

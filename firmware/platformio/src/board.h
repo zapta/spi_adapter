@@ -3,8 +3,6 @@
 
 #pragma once
 
-// #include <SPI.h>
-
 
 // An abstrat LED.
 class Led {
@@ -16,6 +14,5 @@ namespace board {
 
 extern void setup();
 extern Led& led;
-// extern TwoWire i2c;
 
 }  // namespace board

@@ -9,10 +9,10 @@
 Overview
 ========
 
-The I2C Adapter is a USB to SPI bridge that uses off-the-shelf and inexpensive boards such as the 
-Raspberry Pi Pico, and control it using the python package ``i2c_adapter``.
+The SPI Adapter is a USB to SPI bridge that uses off-the-shelf and inexpensive boards such as the 
+Raspberry Pi Pico, and control it using the python package ``spi_adapter``.
 
-For example, the diagram below shows the wiring to control and SSD1306 SPI OLED display using
+For example, the diagram below shows the wiring to control a SPI OLED display using
 USB and Python API. The full code is provided in the ``examples`` directory of the github repository.
 
 |
@@ -44,6 +44,8 @@ Reading an ADS1118 SPI analog to digital converter from Python.
     adc_value = int.from_bytes(response_bytes[0:2], byteorder='big', signed=True)
     print(f"ADC: {adc_value}", flush=True)
     time.sleep(0.5)
+
+|
 
 Reading and writing auxiliary I/O pins:
 
