@@ -261,8 +261,23 @@ class SpiAdapter:
             return False
         return True
       
+    def read_aux_pin(self, aux_pin_index:int) -> bool | None:
+        """Read a single aux pin.
+
+        :param aux_pin_index: An aux pin index in the range [0, 7]
+        :type aux_pin_index: int
+
+        :returns: The boolean value of the pin or None if error.
+        :rtype: bool | None
+        """
+        assert isinstance(aux_pin_index, int)
+        assert 0 <= aux_pin_index <= 7
+        pins_values = self.read_aux_pins()
+        if pins_values is None:
+          return None
+        return True if pins_values & (1 << aux_pin_index) else False
       
-    def write_aux_pin(self, aux_pin_index, value: bool | int) -> bool:
+    def write_aux_pin(self, aux_pin_index:int, value: bool | int) -> bool:
         """Writes a single aux pin.
 
         :param aux_pin_index: An aux pin index in the range [0, 7]
@@ -277,17 +292,9 @@ class SpiAdapter:
         assert isinstance(aux_pin_index, int)
         assert 0 <= aux_pin_index <= 7
         assert isinstance(value, (bool, int))
-        req = bytearray()
-        req.append(ord("b"))
-        mask_byte = 1 << aux_pin_index
-        values_byte = mask_byte if value else 0
-        req.append(values_byte)
-        req.append(mask_byte)
-        self.__serial.write(req)
-        ok_resp = self.__read_adapter_response("Aux write", 0)
-        if ok_resp is None:
-            return False
-        return True
+        pin_mask = 1 << aux_pin_index
+        pin_value_mask = pin_mask if value else 0
+        return self.write_aux_pins(pin_value_mask, pin_mask)
 
     def test_connection_to_adapter(self, max_tries: int = 3) -> bool:
         """Tests connection to the SPI Adapter.
