@@ -19,10 +19,10 @@ using board::led;
 
 // Maps CS pin index to gp pin index.
 static uint8_t cs_pins[] = {
-    20,  // CS 0 = GP20
-    21,  // CS 1 = GP21
-    22,  // CS 2 = GP22
-    26,  // CS 3 = GP26
+    10,  // CS 0 = GP10
+    11,  // CS 1 = GP11
+    12,  // CS 2 = GP12
+    13,  // CS 3 = GP13
 };
 
 static constexpr uint8_t kNumCsPins = sizeof(cs_pins) / sizeof(*cs_pins);
