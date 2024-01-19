@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spi_adapter"
-version = "0.00.5"
+version = "0.00.6"
 authors = [
   { name="Zapta", email="zapta@zapta.com" },
 ]
