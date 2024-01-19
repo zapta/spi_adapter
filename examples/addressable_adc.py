@@ -19,7 +19,7 @@ spi_address = 15
 cmd = bytes([spi_address,config_byte_msb, config_byte_lsb, 0x00, 0x00])
 
 while True:
-  resp = spi.send(cmd, mode=1)
+  resp = spi.send(cmd, mode=1, speed=4000000)
   assert isinstance(resp, bytearray), type(resp)
   assert len(resp) == 5
   value = int.from_bytes(resp[1:3], byteorder='big', signed=True)
