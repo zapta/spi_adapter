@@ -1,4 +1,4 @@
-i2c_adapter
+spi_adapter
 sphinx==7.2.6
 sphinx_rtd_theme==2.0.0
 readthedocs-sphinx-search==0.3.1

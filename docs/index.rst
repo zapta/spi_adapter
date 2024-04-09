@@ -165,7 +165,7 @@ Setting up the environment
 --------------------------
 1. Install Microsoft's Visual Studio Code ('VSC')
 #. In VSC, add the extension 'platformio'
-#. Clone the I2C Adapter `github repository <https://github.com/zapta/spi_adapter>`_ on your computer.
+#. Clone the SPI Adapter `github repository <https://github.com/zapta/spi_adapter>`_ on your computer.
 #. Use VSC's 'file | open-folder', to open the 'platformio' directory in your local repository.
 #. After platformio will complete installing the necessary tools, click on the 'build' icon in the status bar to verify that the project builds correctly.
 
