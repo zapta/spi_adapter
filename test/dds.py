@@ -12,6 +12,7 @@ port = "/dev/tty.usbmodem101"
 
 spi: SpiAdapter = None
 
+dds_on: bool = False
 
 def ones(num_bits: int) -> int:
     """Construct a bit mask with N LSB bits set."""
@@ -45,12 +46,13 @@ def send_words(*words: int) -> None:
         assert 0 <= w <= ones(16)
         data_bytes.append(w >> 8)
         data_bytes.append(w & ones(8))
-    result = spi.send(data_bytes, read=False)
+    result = spi.send(data_bytes, mode=2,  read=False)
     assert result is not None
 
 
 def dds_reset() -> None:
-    global spi
+    global spi, dds_on
+    dds_on = False
     send_words(bits(8))
     send_words(bits())
 
@@ -83,9 +85,9 @@ def main() -> None:
     dds_set_frequency(2000)
     print(f"Done")
 
-    while True:
-        time.sleep(5.0)
-        print("loop", flush=True)
+    #while True:
+    #    time.sleep(5.0)
+    #    print("loop", flush=True)
 
 
 if __name__ == "__main__":
